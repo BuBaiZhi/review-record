@@ -23,6 +23,9 @@ review-app/android/app/src/main/res/xml/
 *.keystore
 release/
 
+# ---------- 交付产物（APK 供本机拷贝到手机，二进制不入库）----------
+dist/
+
 # ---------- 本机配置与密钥 ----------
 *.env
 .env.local
