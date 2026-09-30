@@ -247,3 +247,4 @@ Obsidian 的"库"本质上就是一个装着 `.md` 文件的普通文件夹，�
 | 2026-09-30 | 1.4 | 文件结构无变化。首次推送成功，远程分支 `main` 建立并与本地同源；`.gitignore` 规划项标记为已完成 |
 | 2026-09-30 | 1.5 | 新增 `product-requirements.md`（第 9 条）与 `functional-design.md`（第 10 条）两份产品文档，纳入文件清单与目录结构总览。**此版本为纯文档产出，未改动任何代码** |
 | 2026-09-30 | 1.6 | 新增 `development-plan.md`（第 11 条）开发计划方案文档，纳入文件清单与目录结构总览。**纯文档产出，未改动代码** |
+| 2026-09-30 | 1.7 | 文件结构无变化。补推 1.5 / 1.6 两个提交成功，本地与远程 `main` 同步至 `002a4b5`。记录一处**环境事实**：本机 git 为 PortableGit 便携版、未加入 PATH（位于 `C:\Users\20472\.workbuddy\binaries\PortableGit\versions\1.2.0\cmd\git.exe`），且已由 Git Credential Manager 2.9.0 承载凭据，后续推送无需令牌 |
