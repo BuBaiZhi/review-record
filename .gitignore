@@ -1,0 +1,41 @@
+# ---------- 编译工具链（仅本机使用，约 970M，绝不能提交）----------
+.android-build/
+
+# ---------- 下载的安装包 ----------
+*.zip
+*.tar.gz
+
+# ---------- Node 依赖 ----------
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ---------- Capacitor / Android 构建产物 ----------
+review-app/android/app/build/
+review-app/android/build/
+review-app/android/.gradle/
+review-app/android/local.properties
+review-app/android/app/src/main/assets/public/
+review-app/android/app/src/main/res/xml/
+*.apk
+*.aab
+*.jks
+*.keystore
+release/
+
+# ---------- 本机配置与密钥 ----------
+*.env
+.env.local
+secrets.json
+
+# ---------- WorkBuddy 工作区状态 ----------
+.workbuddy/
+
+# ---------- 系统与编辑器 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.log
