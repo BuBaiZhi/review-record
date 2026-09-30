@@ -184,3 +184,146 @@
 - [ ] 编译并产出 APK
 - [ ] 获取 GitHub 账号凭据，创建远程仓库并完成首次推送
 - [ ] 真机安装测试
+
+---
+
+## 1.3 — 2026-09-30 — 打通 GitHub 网络链路、完成首次提交
+
+### 本次变化
+
+1. **配置远程仓库**
+   - `git remote add origin https://github.com/BuBaiZhi/review-record.git`
+   - 实测确认该仓库已存在且为公开状态。
+
+2. **排查并修复 TLS 连接故障（关键问题）**
+   - **现象**：`git ls-remote` 报错 `schannel: CRYPT_E_NO_REVOCATION_CHECK (0x80092012) - 吊销功能无法检查证书是否吊销`；`curl https://github.com` 返回码 `000`；但 `gitee.com`、`dl.google.com` 均正常。
+   - **根因分析**：
+     - 本机通过代理 `127.0.0.1:4457` 访问外网，CONNECT 隧道可正常建立（返回 200）；
+     - 代理对 GitHub 做了 TLS 中间人解密，使用私有 CA 签发证书；
+     - 该私有 CA 只安装在 Windows 证书库中，因此 schannel 能完成证书链验证，仅卡在吊销状态检查（代理环境无法访问 OCSP 服务器）；
+     - 切换 OpenSSL 后端后报 `unable to get local issuer certificate (20)`，进一步佐证"证书签发者不在 OpenSSL 信任库中"。
+   - **修复方案**：
+     1. 用 PowerShell 将 Windows 根证书库（`LocalMachine\Root` + `CurrentUser\Root`）导出为 PEM 文件，共 102 张证书，存放于 `.git/win-root-ca.pem`（位于 `.git` 内，不会进入版本控制）；
+     2. 对本仓库设置 `http.sslBackend = openssl`、`http.sslCAInfo = <上述 PEM 文件>`。
+   - **效果**：`git ls-remote origin` 成功执行；证书校验**保持开启**，未采用 `sslVerify=false` 这类降级方案。
+   - **原则说明**：没有图省事直接关掉证书校验，因为那样会让访问令牌暴露给中间人。
+
+3. **设置提交身份**
+   - `user.name = BuBaiZhi`
+   - `user.email = BuBaiZhi@users.noreply.github.com`
+   - 说明：因本机未配置 Git 全局身份，暂以仓库所有者的 GitHub 用户名与 noreply 邮箱作为提交身份，后续可按需修改。
+
+4. **完成首次提交**
+   - 提交哈希：`e392433`
+   - 变更统计：5 个文件，924 行新增
+   - 内容：`.gitignore`、`documents/architecture.md`、`documents/progress.md`、`review-app/www/index.html`、`review-app/www/styles.css`
+   - 已确认 `.android-build/`（1.1G 工具链）与 `.workbuddy/` 未进入提交。
+
+5. **推送尝试失败（阻塞点）**
+   - 执行 `git push -u origin main`，GitHub 返回：
+     `remote: Invalid username or token. Password authentication is not supported for Git operations.`
+   - **结论**：网络链路已完全打通（请求抵达 GitHub 并由其响应），**唯一阻塞项为缺少身份凭据**。GitHub 已不支持账号密码认证，必须使用个人访问令牌（PAT）。
+
+### 涉及文件
+
+| 文件 | 变化 |
+| --- | --- |
+| `.git/config` | 新增本地配置：`http.sslBackend`、`http.sslCAInfo`、`user.name`、`user.email`、`remote.origin` |
+| `.git/win-root-ca.pem` | 新建。Windows 根证书库导出文件（102 张），仅供本机 Git 使用，位于 `.git` 内不纳入版本控制 |
+| `documents/progress.md` | 更新。追加本小节 |
+
+### 当前可运行状态
+
+- ✅ 编译工具链完全就绪（JDK 17 + Android SDK）
+- ✅ 页面结构与样式完成（静态，尚无交互）
+- ✅ Git 仓库就绪，**首次提交已完成（e392433）**
+- ✅ **GitHub 网络链路已打通并经实测验证**
+- ⏳ **推送等待用户提供 PAT（唯一阻塞项）**
+- ⏳ `review-app/www/app.js` 尚未编写
+- ⏳ Capacitor 工程尚未初始化
+- ⏳ APK 尚未产出
+
+### 待办清单
+
+- [ ] **获取 GitHub PAT，执行 `git push -u origin main`（当前唯一阻塞项）**
+- [ ] 编写 `review-app/www/app.js`
+- [ ] 初始化 Capacitor 配置与 Android 工程
+- [ ] 编写原生文件写入插件
+- [ ] 编译并产出 APK
+- [ ] 真机安装测试
+
+---
+
+## 1.4 — 2026-09-30 — 首次推送成功，代码已上传 GitHub
+
+### 本次变化
+
+1. **令牌问题的定位与解决**
+   - 用户提供的是**细粒度个人访问令牌**（`github_pat_` 开头，标准长度 93 位）；
+   - 第一次收到时长度仅为 31 位，为复制/转述过程中被截断，导致 GitHub 返回 `remote: Invalid username or token.`；
+   - 重新核对后确认完整长度为 **93 位**，用 `https://api.github.com/user` 实测验证，返回 `"login": "BuBaiZhi"`，令牌有效。
+
+2. **推送成功（1.3 中的阻塞项已解除）**
+   - 执行命令（令牌通过 URL 临时传入，**未写入任何配置文件**）：
+     ```
+     git push https://<user>:<token>@github.com/BuBaiZhi/review-record.git main:main
+     ```
+   - 返回：
+     ```
+     To https://github.com/BuBaiZhi/review-record.git
+      * [new branch]      main -> main
+     ```
+     退出码 `0`。
+   - 远程分支哈希：`e3924332db4f19b3ab9983600398f594c837238e`，与本地 `HEAD` 完全一致。
+
+3. **远程仓库内容核对（GitHub API 实测，非推断）**
+
+   | 路径 | 大小 |
+   | --- | --- |
+   | `.gitignore` | 794 B |
+   | `documents/architecture.md` | 8923 B |
+   | `documents/progress.md` | 8286 B |
+   | `review-app/www/index.html` | 8285 B |
+   | `review-app/www/styles.css` | 12910 B |
+
+   - 已确认 `.android-build/`（1.1G 工具链）与 `.workbuddy/` **未上传**，`.gitignore` 规则生效。
+
+4. **分支跟踪配置的一处变通**
+   - 现象：`git fetch origin` 报 `* [new branch] main -> origin/main`，但 `git branch -r` 始终为空，`git branch --set-upstream-to` 报 `upstream branch does not exist`。
+   - 判断：当前运行环境下 `.git/refs/remotes/` 的写入未能落盘（`.git/config` 的写入不受影响）。
+   - 处理：绕过远程跟踪引用，直接写入跟踪配置 —— `branch.main.remote = origin`、`branch.main.merge = refs/heads/main`。
+   - 影响范围：仅影响本机 `git status` 的 ahead/behind 显示，**不影响仓库内容、不影响推送**。
+
+5. **未做的事（有意为之）**
+   - 未执行 `git config credential.helper store`，未把令牌写入 `.git/config` 或 `~/.git-credentials`，避免令牌以明文长期留在磁盘上。
+   - 未关闭 TLS 证书校验。
+
+### 涉及文件
+
+| 文件 | 变化 |
+| --- | --- |
+| `.git/config` | 更新。新增 `branch.main.remote`、`branch.main.merge` 分支跟踪配置（1.3 中已记录 TLS 与身份相关配置） |
+| `documents/progress.md` | 更新。追加本小节 |
+| `documents/architecture.md` | 更新。新增第 7、8 条文件职责（`.git/config`、`.git/win-root-ca.pem`）；目录结构总览与文件类型说明补充 `.git/` 条目；补充远程仓库地址；变更记录补记 1.2–1.4 |
+
+### 当前可运行状态
+
+- ✅ **代码已上传 GitHub** —— <https://github.com/BuBaiZhi/review-record>
+- ✅ 编译工具链完全就绪（JDK 17 + Android SDK）
+- ✅ 页面结构与样式完成（静态，尚无交互）
+- ✅ 文档体系就绪（`progress.md` / `architecture.md` 双轨记录）
+- ⏳ `review-app/www/app.js` 尚未编写 —— **应用仍为无交互的静态空壳，当前最大阻塞项**
+- ⏳ Capacitor 工程尚未初始化
+- ⏳ APK 尚未产出
+
+### 待办清单
+
+- [x] ~~获取 GitHub PAT，完成首次推送~~ —— 本版本已完成
+- [ ] **编写 `review-app/www/app.js`（当前最大阻塞项）**
+- [ ] 初始化 Capacitor 配置与 Android 工程
+- [ ] 编写原生文件写入插件（用于直接写入 Obsidian 库文件夹）
+- [ ] 编译并产出 APK
+- [ ] 真机安装测试
+- [ ] 安全事项：本轮使用的 PAT 已在聊天中明文出现，建议在 GitHub 上撤销并重新生成
+
+> **说明**：1.3 小节待办清单中的未勾选项保持原样未作修改，以维持版本快照的可追溯性；其完成状态以本小节为准。

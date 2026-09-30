@@ -14,6 +14,10 @@
 │
 ├── .gitignore                         Git 排除规则（工具链、构建产物、依赖）
 │
+├── .git\                              Git 仓库元数据（不纳入版本控制）
+│   ├── config                         本仓库配置：TLS 后端、CA 证书路径、提交身份、远程地址、分支跟踪
+│   └── win-root-ca.pem                Windows 根证书库导出件（102 张），用于穿过本机代理访问 GitHub
+│
 ├── documents\                         项目文档（进度、架构）
 │   ├── progress.md                    开发进度记录，按 1.0 / 1.1 递增，只增不删
 │   └── architecture.md                本文件，记录各文件职责
@@ -44,7 +48,10 @@
 | --- | --- | --- | --- |
 | `documents/` | 否 | ✅ 是 | 项目文档 |
 | `review-app/` | ✅ 是 | ✅ 是 | 应用全部源代码 |
+| `.git/` | 否 | ❌ 否 | Git 元数据目录。其中 `config` 与 `win-root-ca.pem` 是针对**本机网络环境**的配置，换机器需重新生成 |
 | `.android-build/` | 否 | ❌ 否 | 仅本机编译用，约 970M，必须排除 |
+
+> **远程仓库**：<https://github.com/BuBaiZhi/review-record.git>　主分支 `main`　（首次推送 2026-09-30，提交 `e392433`）
 
 ---
 
@@ -112,6 +119,33 @@
 - **效果**：仓库中仅保留 `documents/`、`review-app/www/`、`.gitignore` 三类内容。
 - **规则**：新增需要排除的目录时，需同步更新本文件说明。
 
+### 7. `.git/config`（2026-09-30 新增）
+
+- **职责**：本仓库的 Git 本地配置，不纳入版本控制。
+- **关键内容**：
+  - `http.sslBackend = openssl`
+  - `http.sslCAInfo = <仓库>/.git/win-root-ca.pem`
+  - `user.name = BuBaiZhi`、`user.email = BuBaiZhi@users.noreply.github.com`
+  - `remote.origin.url = https://github.com/BuBaiZhi/review-record.git`
+  - `branch.main.remote = origin`、`branch.main.merge = refs/heads/main`
+- **为什么改 TLS 配置**：本机通过代理 `127.0.0.1:4457` 访问外网，代理对 GitHub 做了 TLS 中间人解密，使用一张只安装在 Windows 证书库中的私有 CA 签发证书。默认的 schannel 后端能验通证书链，却卡在**吊销状态检查**（代理环境访问不到 OCSP 服务器），报 `CRYPT_E_NO_REVOCATION_CHECK`；切换到 OpenSSL 后端后又因不信任该私有 CA 而报 `unable to get local issuer certificate`。
+- **处理原则**：**没有关闭证书校验**（`sslVerify=false` 会让访问令牌暴露给中间人），而是把 Windows 根证书库导出给 OpenSSL 使用，校验保持完整。
+- **规则**：换机器、换网络环境或代理策略变更时，需重新生成本地 CA 文件并更新 `sslCAInfo`。
+
+### 8. `.git/win-root-ca.pem`（2026-09-30 新增）
+
+- **职责**：存放从 Windows 根证书库导出的根证书（`LocalMachine\Root` + `CurrentUser\Root`，共 102 张），供 Git 的 OpenSSL 后端完成证书链校验。
+- **生成方式**：
+  ```powershell
+  Get-ChildItem Cert:\LocalMachine\Root, Cert:\CurrentUser\Root |
+    ForEach-Object {
+      "-----BEGIN CERTIFICATE-----"
+      [Convert]::ToBase64String($_.RawData, 'InsertLineBreaks')
+      "-----END CERTIFICATE-----"
+    } | Set-Content .git\win-root-ca.pem
+  ```
+- **规则**：位于 `.git/` 内，**不进入版本控制、不上传 GitHub** —— 它只对本机网络环境有意义。
+
 ---
 
 ## 四、技术选型说明
@@ -173,7 +207,7 @@ Obsidian 的"库"本质上就是一个装着 `.md` 文件的普通文件夹，�
 | `review-app/package.json` | 依赖声明与构建脚本 |
 | `review-app/capacitor.config.json` | Capacitor 配置（应用名、包名、webDir） |
 | `review-app/android/` | Capacitor 生成的安卓原生工程 |
-| `.gitignore` | 排除 `.android-build/`、`android/` 构建产物等 |
+| `.gitignore` | 排除 `.android-build/`、`android/` 构建产物等 —— **已于 1.1 创建，见「文件清单」第 6 条** |
 | `documents/` 下其他文档 | 按需新增，如使用说明、Obsidian 配置指南 |
 
 ---
@@ -184,3 +218,6 @@ Obsidian 的"库"本质上就是一个装着 `.md` 文件的普通文件夹，�
 | --- | --- | --- |
 | 2026-09-30 | 1.0 | 建立 `documents` 目录；创建 `progress.md` 与 `architecture.md`；记录 `index.html`、`styles.css`、`setup.sh` 三个已存在文件的职责 |
 | 2026-09-30 | 1.1 | 新增 `.gitignore` 文件，纳入文件清单（第 6 条），并同步更新目录结构总览与文件类型说明中的仓库排除策略 |
+| 2026-09-30 | 1.2 | 文件结构无变化。编译工具链安装完成并实测验证通过（JDK 17、Android SDK `android-34` / `build-tools 34.0.0`、7 项许可全部接受），仅记录状态 |
+| 2026-09-30 | 1.3 | 新增 `.git/config`（第 7 条）与 `.git/win-root-ca.pem`（第 8 条）职责说明，含 TLS 故障根因与修复方式；目录结构总览与文件类型说明补充 `.git/` 条目 |
+| 2026-09-30 | 1.4 | 文件结构无变化。首次推送成功，远程分支 `main` 建立并与本地同源；`.gitignore` 规划项标记为已完成 |
