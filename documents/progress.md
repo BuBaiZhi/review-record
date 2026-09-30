@@ -611,3 +611,71 @@
 - [ ] 阶段四：文件写入插件、`.md` 生成器、Obsidian 镜像写入、导出分享 → `v0.3`
 - [ ] 阶段五：检索、数据看板、周月汇总、设置页收尾 → `v1.0`
 - [ ] 真机安装测试 → 各阶段验收 → 最终连续 7 天试用
+
+---
+
+## 1.9 — 2026-09-30 — 用户提供手机与模板；查出一处影响方案可行性的风险
+
+### 本版本做了什么
+
+1. **用户提供了两项开工前置输入**
+   - 手机：**OPPO Reno14**（ColorOS 15 / Android 15，联发科天玑 8350，2025-05 发布）
+   - 自定义模板栏目：**完成任务汇总 / 卡点疑惑 / 感受与收获 / 明日代办**（按用户原文记录）
+   - 8.3 与 8.13 中的待办项全部解除
+
+2. **查出一处高风险问题：国内 OEM ROM 上系统语音识别可能根本用不了**（本版本最重要的事）
+   - **背景**：原设计的语音方案依赖安卓系统自带的 `SpeechRecognizer`（即 `RecognitionService`），它依赖 Google 语音服务
+   - **事实**：国内 OEM ROM（**小米 / 华为 / OPPO / vivo**）普遍不预装 Google 语音服务，导致
+     ```java
+     SpeechRecognizer.isRecognitionAvailable(context)   // 返回 false
+     ```
+   - **关键澄清**：`false` **不等于没有引擎**。2026 年 3 月一份开源项目修复（openclaw#38691）指出这些机型**自带可用的 OEM 语音引擎**（例：小米 `com.xiaomi.mibrain.speech/.asr.AsrService`），只是没注册成默认服务。正确做法是绕开该检测，读 `Settings.Secure.voice_recognition_service` 拿到组件名后用 `createSpeechRecognizer(context, componentName)` 定向调用；同时 `targetSdk ≥ 31` 必须在 Manifest 里声明 `<queries>`
+   - **OPPO 的不确定性**：有较早资料称 OPPO 自 7.0 起该方法即返回 `false` 且当时无解；但 ColorOS 自带「录音转文字」「AI 语音摘要」，说明本机**存在 ASR 引擎**，只是**是否以标准 `RecognitionService` 开放给第三方应用无法从公开资料确定**
+   - **结论：必须真机实测，不能靠推断** —— 这正是方案二把语音验证放在最前的原因
+
+3. **阶段一的验证方式据此升级：先用 adb，不先打 APK**
+   - 原计划是写一个语音探针 APK 去试。后发现 Android SDK 的 `platform-tools` 已就位、`adb` 可直接用（版本 37.0.1），**查系统配置的成本近乎为零**
+   - 新增「第 0 步」实测步骤（无需安装任何东西，约 1 分钟）：
+     ```bash
+     adb shell settings get secure voice_recognition_service
+     adb shell pm list packages | grep -iE "speech|voice|asr|iflytek|oppo"
+     ```
+   - 判定：返回有效组件名 → 系统识别大概率可走通；返回 `null` 且无相关包 → 转云端 ASR
+   - 只有 adb 判断不了「引擎能否真的出字」时，才打最小探针 APK 兜底
+
+4. **备选方案重新核实：云端 ASR 已可免费，且收益比预期大**
+   - 硅基流动（SiliconFlow）官方价格页标注 `FunAudioLLM/SenseVoiceSmall`、`Qwen/Qwen3-ASR-1.7B`、`XingChenASR-V3.2` **均为 0 元**
+   - 前置条件：需注册账号并**完成实名认证**（官方公告：自 2026-05-15 起未实名无法使用平台功能）
+   - **反向收益**：系统识别有 **60 秒单次上限**，正是「分段续录」这套最复杂机制的来源。**改走云端识别，分段续录整套复杂度直接消失**，且中文识别准确率更高。也就是说原方案里唯一"可能根本做不成"的风险点被移除，换来的方案反而更简单
+   - 代价：音频需上传到服务商；需联网（可先离线录音、联网后补转写）
+   - **处理方式**：先用 adb 实测，结果出来再决定是否启用，**不提前改动 5.2 的设计**
+
+### 涉及文件
+
+| 文件 | 变化 |
+| --- | --- |
+| `documents/functional-design.md` | **更新至 1.1**。第十一节补记模板栏目定义（待定事项 1 解除）；新增**第十三节「语音识别可用性风险」**（问题、正确适配方式、adb 实测步骤、云端 ASR 备选对比）；第十二节末尾加指向说明 |
+| `documents/development-plan.md` | **更新至 2.1**。8.3 补记三项前置已提供；8.4 阶段一新增「第 0 步 adb 探测」并重写"你需要做"；8.4 补入云端 ASR 备选对比；8.13 标记待办解除；新增 2.1 版本记录 |
+| `documents/progress.md` | 更新。追加本小节 |
+| `documents/architecture.md` | 更新。变更记录补 1.9；文件结构无变化 |
+| 代码 | **无改动。** 本版本仍为纯文档产出 |
+
+### 当前可运行状态
+
+- ✅ 代码与文档均已同步至 GitHub（`main` = `65f4393`，本版本提交随后推送）
+- ✅ git 推送链路正常，`git push` 秒级返回，无需令牌
+- ✅ 编译工具链完全就绪（JDK 17 + Android SDK 34 + build-tools 34.0.0 + **platform-tools / adb 37.0.1**）
+- ✅ 需求文档、功能设计文档（1.1）、开发计划（2.1 正式实施计划）就绪
+- ✅ 开工前置输入已齐（手机型号 + 模板栏目）
+- ⏳ **阶段一第 0 步（adb 探测语音识别可用性）尚未执行 —— 等用户开启 USB 调试并连接手机**
+- ⏳ `review-app/www/app.js` 尚未编写 —— 应用仍为无交互的静态空壳
+- ⏳ Capacitor 工程尚未初始化；APK 尚未产出
+
+### 待办清单
+
+- [ ] **【当前阻塞】用户开启手机 USB 调试并插线** → 我执行 adb 探测，得出「系统识别可走通 / 不可用」的结论
+- [ ] 依探测结论二选一：
+  - 可走通 → 写原生插件（含 `Settings.Secure.voice_recognition_service` 适配 + Manifest `<queries>`）+ 分段续录调度
+  - 不可用 → 与用户确认改走云端 ASR，并**同步修订 `functional-design.md` 5.2 / 5.3 与里程碑（分段续录可删）**
+- [ ] 阶段一：Capacitor 初始化 → 安卓工程 → 语音插件 → 编译 `v0.0` 探针包
+- [ ] 阶段二 ~ 阶段五：按 `development-plan.md` 第八节执行
