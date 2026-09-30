@@ -744,3 +744,74 @@
 - [ ] 阶段一：Capacitor 初始化 → 安卓工程 → 语音链路 → 编译 `v0.0` 探针包
 - [ ] 阶段二 ~ 阶段五：按 `development-plan.md` 第八节执行
 
+---
+
+## 1.11 — 2026-09-30 — 项目由 C 盘迁移至 D 盘
+
+### 本版本做了什么
+
+**① 迁移动因**
+
+用户要求把项目从系统盘移出。目标位置定为 `D:\Projects\review-record\`（与 GitHub 仓库同名）。
+
+**② 迁移前的依赖排查**
+
+跨盘迁移的风险不在文件本身，而在**写死的绝对路径**。逐项排查结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| `review-app/`（应用代码） | 无路径依赖 |
+| `documents/`（文档） | 无路径依赖 |
+| `.workbuddy/memory/`（项目记忆） | 1 处路径描述（`MEMORY.md` 第 59 行），**已修正** |
+| `.git/config` | **1 处硬编码**：`http.sslCAInfo`，**已修正** |
+| `.git/hooks/` | 无自定义脚本 |
+| `.android-build/setup.sh` | **1 处硬编码**：`TOOLS=` 变量，**已修正** |
+| Android SDK / JDK 内部 | **无绝对路径**，工具链本身可移植 |
+| WorkBuddy 会话索引 | `~/.workbuddy/changes-index/` 留有旧路径，仅影响历史变更记录，无实际功能影响 |
+
+**③ 执行方式**
+
+- 采用**复制而非剪切**：跨盘剪切本质是"复制 + 删除"，中断会导致数据半途丢失
+- 复制工具：优先 `robocopy /E /COPY:DAT /R:1 /W:1`，中断后以 `cp -r` 补齐
+- **跳过 329M 无用文件**：`jdk17.zip`（182M）、`cmdline-tools.zip`（147M）为已解压安装包，`cmdtools/` 为空目录，三者均未复制
+- 迁移前先 `adb kill-server`，避免 SDK 内文件被占用
+
+**④ 迁移后已修正的三处路径**
+
+| 文件 | 原值 | 新值 |
+| --- | --- | --- |
+| `.git/config` | `sslCAInfo = C:/Users/20472/WorkBuddy/2026-09-30-13-07-11/.git/win-root-ca.pem` | `sslCAInfo = D:/Projects/review-record/.git/win-root-ca.pem` |
+| `.android-build/setup.sh` | `TOOLS="/c/Users/20472/WorkBuddy/2026-09-30-13-07-11/.android-build"` | `TOOLS="/d/Projects/review-record/.android-build"` |
+| `.workbuddy/memory/MEMORY.md` | 工作区根目录记为 C 盘路径 | 更新为 D 盘路径，并补记「打开项目需手动选工作空间」 |
+
+**⑤ C 盘源目录处理**
+
+**C 盘源目录保持原样未删除、未修改**，作为迁移后的回退点。待用户在 D 盘副本上确认无误后，由用户自行删除。
+
+### 涉及文件
+
+| 文件 | 变化 |
+| --- | --- |
+| `.git/config` | `sslCAInfo` 指向新路径 |
+| `.android-build/setup.sh` | `TOOLS` 指向新路径 |
+| `.workbuddy/memory/MEMORY.md` | 工作区根目录路径更新 |
+| `documents/progress.md` | 本小节（1.11） |
+| `documents/architecture.md` | 变更记录补 1.11 |
+
+### 当前可运行状态
+
+- ✅ 项目已在 `D:\Projects\review-record\` 生成完整可用副本
+- ✅ 代码、文档、git 仓库、项目记忆、编译工具链均已随迁
+- ✅ 三处硬编码路径已修正
+- ⏳ C 盘源目录待用户确认后自行删除
+- ⏳ **应用代码仍未动** —— `app.js` 未编写，Capacitor 工程未初始化，APK 未产出
+
+### 待办清单
+
+- [ ] 用户在 D 盘目录验证：`git status`、`git log`、`git fetch origin` 均正常
+- [ ] 用户在 WorkBuddy 新建任务时，**手动选择 `D:\Projects\review-record\` 作为工作空间**
+- [ ] 确认无误后由用户删除 C 盘旧目录 `C:\Users\20472\WorkBuddy\2026-09-30-13-07-11\`
+- [ ] **【仍为当前阻塞】用户就云端 ASR 路线回答三问**：是否接受实名认证 / 是否接受音频上传 / 是否切换主路线
+- [ ] 阶段一：Capacitor 初始化 → 安卓工程 → 语音链路 → 编译 `v0.0` 探针包
+- [ ] 阶段二 ~ 阶段五：按 `development-plan.md` 第八节执行
+
